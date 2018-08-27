@@ -1,12 +1,12 @@
 ### Install necessary packages 
 ### This section only needs to be run once per machine
 ### After it has been run, comment it out by highlighting all rows and typing Ctrl-Alt-C
-install.packages('tidyverse')
-install.packages('lubridate')
-install.packages('zoo')
-install.packages('ggthemes')
-install.packages('scales')
-install.packages('RColorBrewer')
+# install.packages('tidyverse')
+# install.packages('lubridate')
+# install.packages('zoo')
+# install.packages('ggthemes')
+# install.packages('scales')
+# install.packages('RColorBrewer')
 
 
 ### Load necessary libraries (must be run with every new instance of the R kernel)
@@ -34,25 +34,26 @@ setwd(wd)
 ### folder designated in the previous step
 ### This step reads the contents of the csv file into a data.frame called "c"
 filename <- 'sample_transactions.csv'
-c <- read.csv(filename)
+t <- read.csv(filename)
 
 ### Observe the variable types and top 6 rows in the data
-str(c)
-head(c)
+str(t)
+head(t)
 
 ### Convert the dt field to a Date type so we can perform date math later
-c$dt <- as.Date(as.character(c$dt), "%Y-%m-%d")
+t$dt <- as.Date(as.character(t$dt), "%Y-%m-%d")
 
 ### Create a new column called "Month_Year" that stores the month/year of the transaction date
-c$Month_Year <- as.yearmon(c$dt)
+t$Month_Year <- as.yearmon(t$dt)
 
 
 ### DAU Growth Accounting
 ### Grouping by user and date (and Month_Year), calculate the sum of the income
-dau <- c %>%
+dau <- t %>%
   group_by(user_id, dt, Month_Year) %>%
   summarize(inc_amt = sum(inc_amt)) %>%
-  filter(inc_amt > 0)
+  filter(inc_amt > 0) %>%
+  data.frame()
 head(dau, 20)
 
 
@@ -60,7 +61,8 @@ head(dau, 20)
 ### Grouping by user and month, calculate the sum of the income
 mau <- dau %>%
   group_by(user_id, Month_Year) %>%
-  summarize(inc_amt = sum(inc_amt, na.rm = T))
+  summarize(inc_amt = sum(inc_amt, na.rm = T)) %>%
+  data.frame()
 head(mau, 20)
 
 
@@ -68,7 +70,8 @@ head(mau, 20)
 first_dt <- dau %>%
   group_by(user_id) %>%
   summarize(first_dt = min(dt),
-            first_month = as.yearmon(first_dt))
+            first_month = as.yearmon(first_dt)) %>%
+  data.frame()
 head(first_dt, 20)
 
 
@@ -77,7 +80,8 @@ head(first_dt, 20)
 ### month from the transaction's month-year
 mau_decorated <- mau %>%
   left_join(first_dt, by = 'user_id') %>%
-  filter(inc_amt > 0) 
+  filter(inc_amt > 0) %>%
+  data.frame()
 mau_decorated$Next_Month_Year = as.yearmon(mau_decorated$Month_Year + 1/12)
 head(mau_decorated, 20)
 
@@ -113,13 +117,15 @@ growth_accounting <- full_join(mau_decorated, mau_decorated, suffix = c('.tm', '
          rev_lm = lag(rev),
          mrr_retention_rate = retained_rev / rev_lm
   ) %>%
-  filter(mau > 0) 
+  filter(mau > 0) %>%
+  data.frame()
 
 
 ### Create dataset for MAU Growth Accounting
 mau_growth_accounting <- growth_accounting %>%
   select(Month_Year, mau, retained_users, new_users, resurrected_users, churned_users, mau_quick_ratio,
-         mau_quick_ratio, mau_retention_rate)
+         mau_quick_ratio, mau_retention_rate) %>%
+  data.frame()
 write.csv(mau_growth_accounting, sprintf('%s MAU Growth Accounting.csv', company_name), row.names = F)
 tail(mau_growth_accounting, 20)
 
@@ -127,7 +133,8 @@ tail(mau_growth_accounting, 20)
 ### Create dataset for MRR Growth accounting
 mrr_growth_accounting <- growth_accounting %>%
   select(Month_Year, rev, retained_rev, new_rev, resurrected_rev, 
-         expansion_rev, contraction_rev, churned_rev, mrr_quick_ratio, mrr_retention_rate)
+         expansion_rev, contraction_rev, churned_rev, mrr_quick_ratio, mrr_retention_rate) %>%
+  data.frame()
 write.csv(mrr_growth_accounting, sprintf('%s MRR Growth Accounting.csv', company_name), row.names = F)
 tail(mrr_growth_accounting, 20)
 
