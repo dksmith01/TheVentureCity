@@ -6,3 +6,4 @@ This repository is a public resource for code, data samples, and other materials
 - Sample data is found in sample_transactions.csv
 - Sample R script code is found in sampleco.R
 - Example outputs and analysis spreadsheets are found in the MAU Growth Accounting.* and MRR Growth Accounting.* files
+- Sample L365 R script code is in sampleco_l365.R
