@@ -411,6 +411,9 @@ def xau_retention_by_cohort_df(xau_decorated_df, time_period, recent_periods_bac
     
     xau_d = xau_d.loc[xau_d[grouping_col] <= last_period]
     
+    xau_d[first_period_col] = pd.PeriodIndex(xau_d[first_period_col], freq = period_abbr).start_time
+    xau_d[grouping_col] = pd.PeriodIndex(xau_d[grouping_col], freq = period_abbr).start_time
+    
 #    if incl_curr_per:
 #        xau_d = xau_d.loc[xau_d[grouping_col] <= curr_per]
 #    else:
@@ -446,9 +449,9 @@ def assign_ga_date_range(row, last_date, window_days):
 ### how the aggregate count and sum should be classified according to growth
 ### accounting definitions
 def assign_user_status(x):
-    is_last_period = pd.notnull(x.last_period)
-    is_this_period = pd.notnull(x.this_period)
-    is_first_this_period = pd.notnull(x.first_this_period)
+    is_last_period = pd.notnull(x.last_period) if hasattr(x, 'last_period') else False
+    is_this_period = pd.notnull(x.this_period) if hasattr(x, 'this_period') else False
+    is_first_this_period = pd.notnull(x.first_this_period) if hasattr(x, 'first_this_period') else False
     
     if is_first_this_period:
         status = 'new'
@@ -536,6 +539,8 @@ def calc_rolling_qr_window(dau_decorated_df, window_days = 28, use_segment = Fal
         print(window_days, d2)
         this_window = calc_ga_for_window(dau_decorated_df, d2, window_days, use_segment)
         rolling_qr_df = rolling_qr_df.append(this_window)
+        
+    rolling_qr_df['window_end_date'] = pd.to_datetime(rolling_qr_df['window_end_date'])
     return rolling_qr_df
 
 ################### NEW AS OF 11/5/18
@@ -597,6 +602,8 @@ def create_dau_window_df(dau_decorated_df, window_days = 28, breakouts = [2, 4])
                                                     window_days = window_days, 
                                                     breakouts = breakouts)
         rolling_dau_xau_df = rolling_dau_xau_df.append(this_window)
+        
+    rolling_dau_xau_df['window_end_dt'] = pd.to_datetime(rolling_dau_xau_df['window_end_dt'])
     return rolling_dau_xau_df
 
     
