@@ -323,6 +323,10 @@ def calc_user_ga_ratios(user_xga_df, time_period):
     ratio_df['User Quick Ratio'] = ratio_df.apply(lambda x: calc_user_qr(x, 
             new_col = 'New Users', res_col = 'Resurrected Users', 
             churned_col = 'Churned Users'), axis = 1)
+    
+#    cgr_col = 'T12' + per + ' User C' + per + 'GR'
+#    ratio_df[cgr_col] = (ratio_df[frequency + ' Active Users']/ratio_df[frequency + ' Active Users'].shift(12))^(1/12)-1
+    
     return ratio_df
 
 
@@ -344,6 +348,7 @@ def calc_rev_ga_ratios(rev_xga_df, time_period):
             new_col = 'New Revenue', res_col = 'Resurrected Revenue', 
             exp_col = 'Expansion Revenue', churned_col = 'Churned Revenue', 
             con_col = 'Contraction Revenue'), axis = 1)
+    
     return ratio_df
 
 
@@ -514,12 +519,14 @@ def calc_ga_for_window(dau_decorated_df, last_date, window_days, use_segment):
     
     new_users = dau_grouped_2.new if hasattr(dau_grouped_2, 'new') else 0 
     res_users = dau_grouped_2.resurrected if hasattr(dau_grouped_2, 'resurrected') else 0
+    dau_grouped_2.churned = -1 * dau_grouped_2.churned if hasattr(dau_grouped_2, 'churned') else 0
     churned_users = dau_grouped_2.churned if hasattr(dau_grouped_2, 'churned') else 0
     ret_users = dau_grouped_2.retained if hasattr(dau_grouped_2, 'retained') else 0
-
+    
     dau_grouped_2['user_quick_ratio'] = dau_grouped_2.apply(calc_user_qr, axis = 1)
-    dau_grouped_2['user_retention_rate'] = ret_users / (ret_users + churned_users)
+    dau_grouped_2['user_retention_rate'] = ret_users / (ret_users - churned_users)
     dau_grouped_2['window_days'] = window_days
+    dau_grouped_2['Growth Threshold'] = 1
         
     return dau_grouped_2
     
