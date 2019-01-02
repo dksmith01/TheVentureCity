@@ -123,11 +123,14 @@ def create_dau_decorated_df(dau_df, use_segment, first_dt_df = None):
     if first_dt_df is None:
         first_dt_df = create_first_dt_df(dau_df)
     dau_decorated_df = pd.merge(dau_df, first_dt_df, how = 'left', on = 'user_id')
-    if use_segment:
-        return_df = dau_decorated_df[['user_id', 'activity_date', 'inc_amt', 'segment', 'first_dt']]
-    else:
-        return_df = dau_decorated_df[['user_id', 'activity_date', 'inc_amt', 'first_dt']]
-    return return_df
+#    if use_segment:
+#        return_df = dau_decorated_df[['user_id', 'activity_date', 'inc_amt', 
+#                                      'segment', 'first_dt', 'first_week', 'first_month']]
+#    else:
+#        return_df = dau_decorated_df[['user_id', 'activity_date', 'inc_amt', 
+#                                      'first_dt', 'first_week', 'first_month']]
+    
+    return dau_decorated_df
 
 
 
@@ -135,13 +138,63 @@ def create_dau_decorated_df(dau_df, use_segment, first_dt_df = None):
 ### adds the user's first week to the WAU dataframe
 ### wau_decorated is used in the subsequent functions below
 ### Using the segmented column from a segmented DAU dataframe is not an option at this time
-def create_wau_decorated_df(wau_df, first_dt_df):
-    print('Creating WAU Decorated dataframe')
-    wau_decorated = pd.merge(wau_df.copy(), first_dt_df.copy(), how = 'left', on = 'user_id')
-    wau_decorated['start_of_next_week'] = pd.to_datetime(pd.PeriodIndex(wau_decorated['Week']).start_time + timedelta(weeks = 1))
-    wau_decorated['Next_Week'] = wau_decorated['start_of_next_week'].dt.to_period('W')
-    wau_decorated = wau_decorated[['Week', 'user_id', 'inc_amt', 'first_week', 'Next_Week']]
-    return wau_decorated
+#def create_wau_decorated_df(wau_df, first_dt_df):
+#    print('Creating WAU Decorated dataframe')
+#    wau_decorated = pd.merge(wau_df, first_dt_df, how = 'left', on = 'user_id')
+#    wau_decorated['start_of_next_week'] = pd.to_datetime(pd.PeriodIndex(wau_decorated['Week']).start_time + timedelta(weeks = 1))
+#    wau_decorated['Next_Week'] = wau_decorated['start_of_next_week'].dt.to_period('W')
+#    wau_decorated = wau_decorated[['Week', 'user_id', 'inc_amt', 'first_week', 'Next_Week']]
+#    return wau_decorated
+
+    
+
+
+def increment_period(xau_grouping_col, time_period):
+    time_fields = get_time_period_dict(time_period)
+    period_abbr = time_fields['period_abbr']
+    
+    if time_period == 'week':
+        start_of_next_period = pd.to_datetime(pd.PeriodIndex(xau_grouping_col).start_time + timedelta(weeks = 1))
+    elif time_period == 'month':
+        start_of_next_period = pd.to_datetime(pd.PeriodIndex(xau_grouping_col, freq = period_abbr).start_time) + pd.DateOffset(months = 1)
+    else:
+        start_of_next_period = None
+        
+    if start_of_next_period is not None:
+        next_period = pd.Series(start_of_next_period).dt.to_period(period_abbr)
+    else:
+        next_period = None
+    
+    return next_period
+
+
+
+
+def create_xau_decorated_df(dau_decorated_df, time_period, use_segment):
+    
+    time_fields = get_time_period_dict(time_period)
+    grouping_col = time_fields['grouping_col']
+    frequency = time_fields['frequency']
+    first_period_col = time_fields['first_period_col']
+    period_abbr = time_fields['period_abbr']
+    
+    print('Creating ' + frequency + ' Active Users Decorated dataframe')
+    
+    groupby_cols = [grouping_col, 'user_id', first_period_col]
+    if use_segment:
+        groupby_cols = groupby_cols + ['segment']
+        
+    dau_decorated = dau_decorated_df.copy()
+    dau_decorated[grouping_col] = pd.to_datetime(dau_decorated['activity_date']).dt.to_period(period_abbr)
+    xau = (dau_decorated.groupby(groupby_cols, as_index = False)['inc_amt'].sum())
+    xau['Next_' + grouping_col] = increment_period(xau[grouping_col], time_period)
+    
+    output_cols = [grouping_col, 'user_id', 'inc_amt', first_period_col, 'Next_' + grouping_col]
+    if use_segment:
+        output_cols = output_cols + ['segment']
+    xau = xau[output_cols]
+    
+    return xau
 
 
 
@@ -150,13 +203,14 @@ def create_wau_decorated_df(wau_df, first_dt_df):
 ### adds the user's first month to the MAU dataframe
 ### mau_decorated is used in the subsequent functions below
 ### Using the segmented column from a segmented DAU dataframe is not an option at this time
-def create_mau_decorated_df(mau_df, first_dt_df):
-    print('Creating MAU Decorated dataframe')
-    mau_decorated = pd.merge(mau_df.copy(), first_dt_df.copy(), how = 'left', on = 'user_id')
-    mau_decorated['start_of_next_month'] = pd.to_datetime(pd.PeriodIndex(mau_decorated['Month_Year'], freq = 'M').start_time) + pd.DateOffset(months = 1)
-    mau_decorated['Next_Month_Year'] = mau_decorated['start_of_next_month'].dt.to_period('M')
-    mau_decorated = mau_decorated[['Month_Year', 'user_id', 'inc_amt', 'first_month', 'Next_Month_Year']]
-    return mau_decorated
+#def create_mau_decorated_df(mau_df, first_dt_df):
+#    print('Creating MAU Decorated dataframe')
+#    mau_decorated = pd.merge(mau_df.copy(), first_dt_df.copy(), how = 'left', on = 'user_id')
+#    mau_decorated['start_of_next_month'] = pd.to_datetime(pd.PeriodIndex(mau_decorated['Month_Year'], freq = 'M').start_time) + pd.DateOffset(months = 1)
+#    print(mau_decorated['start_of_next_month'])
+#    mau_decorated['Next_Month_Year'] = mau_decorated['start_of_next_month'].dt.to_period('M')
+#    mau_decorated = mau_decorated[['Month_Year', 'user_id', 'inc_amt', 'first_month', 'Next_Month_Year']]
+#    return mau_decorated
 
 
 
@@ -171,6 +225,7 @@ def calc_user_qr(row, new_col = 'new', res_col = 'resurrected', churned_col = 'c
         user_qr = -1 * (new_users + res_users) / churned_users
     else:
         user_qr = math.nan
+        
     return user_qr
 
 
@@ -195,6 +250,7 @@ def calc_rev_qr(row, new_col = 'new', res_col = 'resurrected',
 
 
 
+
 ### This takes a dataframe of transactions grouped by a particular date period
 ### and returns active, retained, new, resurrected, and churned users for that
 ### time period
@@ -204,10 +260,6 @@ def calc_user_ga(x, grouping_col, first_period_col):
     new_users = x.loc[x[first_period_col + '.t'] == x[grouping_col + '.t'], 'user_id'].nunique()
     res_users = x.loc[(x[first_period_col + '.t'] != x[grouping_col + '.t']) & ~(x['inc_amt.l'] > 0), 'user_id'].nunique()
     churned_users = -1 * x.loc[~(x['inc_amt.t'] > 0), 'user_id'].nunique()
-#    if churned_users < 0:
-#        user_qr = -1*(new_users + res_users) / churned_users
-#    else:
-#        user_qr = math.nan
 
     vals = [au, ret_users, new_users, res_users, churned_users]
     return vals
@@ -234,11 +286,6 @@ def calc_rev_ga(x, grouping_col, first_period_col):
                         (x['inc_amt.t'] < x['inc_amt.l']), ['inc_amt.t', 'inc_amt.l']]
     con_rev = con_rev_set['inc_amt.t'].sum() - con_rev_set['inc_amt.l'].sum()
     
-#    if churned_rev + con_rev < 0:
-#        rev_qr = -1*(new_rev + res_rev + exp_rev) / (churned_rev + con_rev)
-#    else:
-#        rev_qr = math.nan
-    
     vals = [rev, ret_rev, new_rev, res_rev, exp_rev, con_rev, churned_rev]
     return vals
 
@@ -247,7 +294,11 @@ def calc_rev_ga(x, grouping_col, first_period_col):
 
 ### Produces the "final" growth accounting dataframe with both user and
 ### revenue numbers for each time period in the "decorated" dataframe
-def create_growth_accounting_dfs(xau_decorated_df, time_period, keep_last_period = True):
+def create_growth_accounting_dfs(xau_decorated_df, 
+                                 time_period, 
+                                 use_segment = False,
+                                 keep_last_period = True, 
+                                 date_limit = None):
     print('Creating Growth Accounting dataframes')
     time_fields = get_time_period_dict(time_period)
     grouping_col = time_fields['grouping_col']
@@ -258,23 +309,32 @@ def create_growth_accounting_dfs(xau_decorated_df, time_period, keep_last_period
     xau_decorated_df_last[grouping_col + '_join'] = xau_decorated_df_last['Next_' + grouping_col]
     xau_decorated_df[grouping_col + '_join'] = xau_decorated_df[grouping_col]
     
+    interim_join_cols = ['user_id', grouping_col + '_join']
+    if use_segment:
+        interim_join_cols = interim_join_cols + ['segment']
+    
     xga_interim = pd.merge(xau_decorated_df, xau_decorated_df_last, 
                            suffixes = ['.t', '.l'],
-                           how = 'outer', left_on = ['user_id', grouping_col + '_join'], 
-                           right_on = ['user_id', grouping_col + '_join'])
-                           
-    user_xga = xga_interim.groupby(grouping_col + '_join')\
+                           how = 'outer', 
+                           left_on = interim_join_cols, 
+                           right_on = interim_join_cols)
+    
+    groupby_cols = [grouping_col + '_join']
+    if use_segment:
+        groupby_cols = groupby_cols + ['segment']
+                        
+    user_xga = (xga_interim.groupby(groupby_cols)
                 .apply(lambda x: pd.Series(calc_user_ga(x, grouping_col, first_period_col),
                                            index = [frequency + ' Active Users', 
                                                     'Retained Users', 
                                                     'New Users', 
                                                     'Resurrected Users',
                                                     'Churned Users'
-                                                    ]))\
-                .reset_index()\
-                .rename(columns = {grouping_col + '_join' : grouping_col})
+                                                    ]))
+                .reset_index()
+                .rename(columns = {grouping_col + '_join' : grouping_col}))
                 
-    rev_xga = xga_interim.groupby(grouping_col + '_join')\
+    rev_xga = (xga_interim.groupby(groupby_cols)
                 .apply(lambda x: pd.Series(calc_rev_ga(x, grouping_col, first_period_col),
                                            index = [frequency + ' Revenue',
                                                     'Retained Revenue',
@@ -283,9 +343,9 @@ def create_growth_accounting_dfs(xau_decorated_df, time_period, keep_last_period
                                                     'Expansion Revenue',
                                                     'Contraction Revenue',
                                                     'Churned Revenue'
-                                                    ]))\
-                .reset_index()\
-                .rename(columns = {grouping_col + '_join' : grouping_col})
+                                                    ]))
+                .reset_index()
+                .rename(columns = {grouping_col + '_join' : grouping_col}))
                 
     user_xga = user_xga[user_xga[frequency + ' Active Users'] > 0]
     rev_xga = rev_xga[rev_xga[frequency + ' Revenue'] > 0]
@@ -296,12 +356,10 @@ def create_growth_accounting_dfs(xau_decorated_df, time_period, keep_last_period
     if not keep_last_period:
         user_xga = user_xga[:-1]
         rev_xga = rev_xga[:-1]
-
-#    user_xga['BOM Users'] = user_xga[frequency + ' Active Users'].shift(1)
-#    rev_xga['BOM Revenue'] = rev_xga[frequency + ' Revenue'].shift(1)
-    
-#    user_xga[frequency + ' Retention Rate'] = user_xga['Retained Users'] / user_xga['BOM Users']
-#    rev_xga[frequency + ' Retention Rate'] = rev_xga['Retained Revenue'] / rev_xga['BOM Revenue']
+        
+    if date_limit is not None:
+        user_xga = user_xga[user_xga[grouping_col] <= date_limit]
+        rev_xga = rev_xga[rev_xga[grouping_col] <= date_limit]
 
     return user_xga, rev_xga
 
@@ -311,21 +369,36 @@ def create_growth_accounting_dfs(xau_decorated_df, time_period, keep_last_period
 ### Using the numbers in the "final" growth accounting dataframe, calculate
 ### the number of users at the beginning of the period (BOP), the  
 ### period-over-period user retention ratio, and the user quick ratio
-def calc_user_ga_ratios(user_xga_df, time_period):
+def calc_user_ga_ratios(user_xga_df, time_period, use_segment = False, growth_rate_periods = 12):
     
     time_fields = get_time_period_dict(time_period)
     frequency = time_fields['frequency']
     per = time_fields['period_abbr']
     
-    ratio_df = user_xga_df.copy()
-    ratio_df['Users BOP'] = ratio_df[frequency + ' Active Users'].shift(1)
-    ratio_df[per + 'o' + per + ' User Retention'] = ratio_df['Retained Users'] / ratio_df['Users BOP']
-    ratio_df['User Quick Ratio'] = ratio_df.apply(lambda x: calc_user_qr(x, 
-            new_col = 'New Users', res_col = 'Resurrected Users', 
-            churned_col = 'Churned Users'), axis = 1)
+    if use_segment:
+        segments = user_xga_df.segment.unique()
+    else:
+        segments = ['All']
+
+    ratio_df = pd.DataFrame()    
+    for s in segments:
+        if s != 'All':
+            this_ratio_df = user_xga_df.copy().loc[user_xga_df['segment'] == s].reset_index()
+        else:
+            this_ratio_df = user_xga_df.copy().reset_index()
+            this_ratio_df['segment'] = s
+            
+        this_ratio_df['Users BOP'] = this_ratio_df[frequency + ' Active Users'].shift(1)
+        this_ratio_df[per + 'o' + per + ' User Retention'] = this_ratio_df['Retained Users'] / this_ratio_df['Users BOP']
+        this_ratio_df['User Quick Ratio'] = this_ratio_df.apply(lambda x: calc_user_qr(x, 
+                     new_col = 'New Users', res_col = 'Resurrected Users', 
+                     churned_col = 'Churned Users'), axis = 1)
     
-#    cgr_col = 'T12' + per + ' User C' + per + 'GR'
-#    ratio_df[cgr_col] = (ratio_df[frequency + ' Active Users']/ratio_df[frequency + ' Active Users'].shift(12))^(1/12)-1
+        cgr_col = 'T%s%s User C%sGR' % (growth_rate_periods, per, per)
+        this_ratio_df[cgr_col] = np.power((this_ratio_df[frequency + ' Active Users'] / \
+                     this_ratio_df[frequency + ' Active Users'].shift(growth_rate_periods)), 1/growth_rate_periods)-1
+        
+        ratio_df = ratio_df.append(this_ratio_df)
     
     return ratio_df
 
@@ -335,19 +408,39 @@ def calc_user_ga_ratios(user_xga_df, time_period):
 ### Using the numbers in the "final" growth accounting dataframe, calculate
 ### the revenue at the beginning of the period (BOP), the  
 ### period-over-period revenue retention ratio, and the revenue quick ratio
-def calc_rev_ga_ratios(rev_xga_df, time_period):
+def calc_rev_ga_ratios(rev_xga_df, time_period, use_segment = False, growth_rate_periods = 12):
     
     time_fields = get_time_period_dict(time_period)
     frequency = time_fields['frequency']
     per = time_fields['period_abbr']
     
-    ratio_df = rev_xga_df.copy()
-    ratio_df['Revenue BOP'] = ratio_df[frequency + ' Revenue'].shift(1)
-    ratio_df[per + 'o' + per + ' Revenue Retention'] = ratio_df['Retained Revenue'] / ratio_df['Revenue BOP']
-    ratio_df['Revenue Quick Ratio'] = ratio_df.apply(lambda x: calc_rev_qr(x,
-            new_col = 'New Revenue', res_col = 'Resurrected Revenue', 
-            exp_col = 'Expansion Revenue', churned_col = 'Churned Revenue', 
-            con_col = 'Contraction Revenue'), axis = 1)
+    if use_segment:
+        segments = rev_xga_df.segment.unique()
+    else:
+        segments = ['All']
+        
+    ratio_df = pd.DataFrame()
+    for s in segments:
+        if s!= 'All':
+            this_ratio_df = rev_xga_df.copy().loc[rev_xga_df['segment'] == s].reset_index()
+        else:
+            this_ratio_df = rev_xga_df.copy().reset_index()
+            this_ratio_df['segment'] = s
+            
+        this_ratio_df['Revenue BOP'] = this_ratio_df[frequency + ' Revenue'].shift(1)
+        this_ratio_df[per + 'o' + per + ' Revenue Retention'] = this_ratio_df['Retained Revenue'] / this_ratio_df['Revenue BOP']
+        this_ratio_df['Revenue Quick Ratio'] = this_ratio_df.apply(lambda x: calc_rev_qr(x,
+                new_col = 'New Revenue', res_col = 'Resurrected Revenue', 
+                exp_col = 'Expansion Revenue', churned_col = 'Churned Revenue', 
+                con_col = 'Contraction Revenue'), axis = 1)
+        this_ratio_df['Net Expansion Revenue'] = this_ratio_df['Expansion Revenue'] + \
+                                            this_ratio_df['Contraction Revenue']
+        
+        cgr_col = 'T%s%s Revenue C%sGR' % (growth_rate_periods, per, per)
+        this_ratio_df[cgr_col] = np.power((this_ratio_df[frequency + ' Revenue'] / \
+                this_ratio_df[frequency + ' Revenue'].shift(growth_rate_periods)), 1/growth_rate_periods)-1
+        
+        ratio_df = ratio_df.append(this_ratio_df)
     
     return ratio_df
 
@@ -361,27 +454,54 @@ def consolidate_ga_dfs(user_ga_df, rev_ga_df, time_period):
     time_fields = get_time_period_dict(time_period)
     grouping_col = time_fields['grouping_col']
     
+    print('Joining user and revenue dataframes')
+    
     consolidated_ga_df = pd.merge(user_ga_df, rev_ga_df,
-                                  how = 'inner', on = grouping_col)
+                                  how = 'inner', on = [grouping_col, 'segment'])
 
     return consolidated_ga_df
 
 
 
 
-### Bring together all the Weekly/Monthly Growth Accounting Functions into a complete
-def consolidate_all_ga(xau_decorated_df, time_period, keep_last_period = True):
-    user_ga, rev_ga = create_growth_accounting_dfs(xau_decorated_df, time_period, keep_last_period)
-    user_ga_with_ratios = calc_user_ga_ratios(user_ga, time_period)
-    rev_ga_with_ratios = calc_rev_ga_ratios(rev_ga, time_period)
+### Bring together all the Weekly/Monthly Growth Accounting Functions into a complete dataframe
+def consolidate_all_ga(xau_decorated_df, 
+                       time_period, 
+                       use_segment = False, 
+                       growth_rate_periods = 12,
+                       keep_last_period = True, 
+                       date_limit = None):
+    
+    user_ga, rev_ga = create_growth_accounting_dfs(xau_decorated_df, time_period, 
+                                                   use_segment, keep_last_period, 
+                                                   date_limit)
+    user_ga_with_ratios = calc_user_ga_ratios(user_ga, time_period, use_segment, growth_rate_periods)
+    rev_ga_with_ratios = calc_rev_ga_ratios(rev_ga, time_period, use_segment, growth_rate_periods)
     all_ga_df = consolidate_ga_dfs(user_ga_with_ratios, rev_ga_with_ratios, time_period)
+    
+    time_fields = get_time_period_dict(time_period)
+    frequency = time_fields['frequency']
+    all_ga_df['Revenue per User'] = all_ga_df[frequency + ' Revenue'] / \
+                                    all_ga_df[frequency + ' Active Users']
+    
     return all_ga_df
 
 
 
+def add_period_n_cum_inc_per_cohort_cust_columns(cohort_df, since_col, unit):
+    c_df = cohort_df.copy()
+    since_vector = c_df[since_col].unique()
+    for n in since_vector:
+        new_column_name = unit + ' %s' % n
+        c_df[new_column_name] = c_df['cum_inc_per_cohort_cust'] * (c_df[since_col] == n)
+        c_df[new_column_name] = c_df[new_column_name].replace(0, np.nan)
+    return c_df
+    
+
 
 ### Calculate the user retention by cohort defined by any weekly or monthly time period
-def xau_retention_by_cohort_df(xau_decorated_df, time_period, recent_periods_back_to_exclude = 1):
+def xau_retention_by_cohort_df(xau_decorated_df, time_period, use_segment = False,
+                               recent_periods_back_to_exclude = 1, date_limit = None):
     
     time_fields = get_time_period_dict(time_period)
     grouping_col = time_fields['grouping_col']
@@ -391,15 +511,28 @@ def xau_retention_by_cohort_df(xau_decorated_df, time_period, recent_periods_bac
         
     since_col = '%ss Since First' % unit
     
-    xau_d = xau_decorated_df.copy()
+    if date_limit is not None:
+        xau_d = xau_decorated_df[pd.PeriodIndex(xau_decorated_df[grouping_col], freq = period_abbr).start_time <= date_limit].copy()
+    else:
+        xau_d = xau_decorated_df.copy()
+    
     xau_d[since_col] = xau_d[grouping_col] - xau_d[first_period_col]
     
-    xau_d = xau_d.groupby([first_period_col, grouping_col, since_col])\
+    first_groupby_cols = [first_period_col, grouping_col, since_col]
+    if use_segment:
+        first_groupby_cols = first_groupby_cols + ['segment']
+    
+    xau_d = xau_d.groupby(first_groupby_cols)\
                     .agg({'inc_amt' : 'sum', 
                           'user_id' : 'nunique'})\
                     .rename(columns = { 'user_id' : 'cust_ct' })
-    xau_d['cohort_cust_ct'] = xau_d.groupby([first_period_col])['cust_ct'].transform('first')
-    xau_d['cum_inc_amt'] = xau_d.groupby([first_period_col])['inc_amt'].cumsum()
+                    
+    second_groupby_cols = [first_period_col]
+    if use_segment:
+        second_groupby_cols = second_groupby_cols + ['segment']
+    
+    xau_d['cohort_cust_ct'] = xau_d.groupby(second_groupby_cols)['cust_ct'].transform('first')
+    xau_d['cum_inc_amt'] = xau_d.groupby(second_groupby_cols)['inc_amt'].cumsum()
     
     xau_d['cum_inc_per_cohort_cust'] = xau_d['cum_inc_amt'] / xau_d['cohort_cust_ct']
     xau_d['cust_ret_pct'] = xau_d['cust_ct'] / xau_d['cohort_cust_ct']
@@ -407,25 +540,23 @@ def xau_retention_by_cohort_df(xau_decorated_df, time_period, recent_periods_bac
     xau_d = xau_d.reset_index()
     
     if time_period == 'month':
-        td = timedelta(months = recent_periods_back_to_exclude)
+#        td = timedelta(months = recent_periods_back_to_exclude)
+        td = pd.DateOffset(months = recent_periods_back_to_exclude)
     elif time_period == 'week':
         td = timedelta(weeks = recent_periods_back_to_exclude)
     
-#    curr_per = pd.to_datetime(datetime.today()).to_period(period_abbr)
     last_period = pd.to_datetime(datetime.today() - td).to_period(period_abbr)
-    
     xau_d = xau_d.loc[xau_d[grouping_col] <= last_period]
     
-    xau_d[first_period_col] = pd.PeriodIndex(xau_d[first_period_col], freq = period_abbr).start_time
-    xau_d[grouping_col] = pd.PeriodIndex(xau_d[grouping_col], freq = period_abbr).start_time
+    xau_d[first_period_col] = pd.PeriodIndex(xau_d[first_period_col], freq = period_abbr).start_time + timedelta(hours = 7)
+    xau_d[grouping_col] = pd.PeriodIndex(xau_d[grouping_col], freq = period_abbr).start_time + timedelta(hours = 7)
     
-#    if incl_curr_per:
-#        xau_d = xau_d.loc[xau_d[grouping_col] <= curr_per]
-#    else:
-#        print(grouping_col, curr_per)
-#        print(xau_d.head())
-#        xau_d = xau_d.loc[xau_d[grouping_col] < curr_per]
+    if use_segment:
+        xau_d['segment_first_month'] = xau_d[first_period_col].dt.strftime('%Y-%m') + '-' + xau_d['segment']  
     
+    xau_d = add_period_n_cum_inc_per_cohort_cust_columns(xau_d, since_col, unit)
+    
+   
     return xau_d
 
 
@@ -523,6 +654,7 @@ def calc_ga_for_window(dau_decorated_df, last_date, window_days, use_segment):
     churned_users = dau_grouped_2.churned if hasattr(dau_grouped_2, 'churned') else 0
     ret_users = dau_grouped_2.retained if hasattr(dau_grouped_2, 'retained') else 0
     
+    dau_grouped_2['active_users'] = new_users + res_users + ret_users
     dau_grouped_2['user_quick_ratio'] = dau_grouped_2.apply(calc_user_qr, axis = 1)
     dau_grouped_2['user_retention_rate'] = ret_users / (ret_users - churned_users)
     dau_grouped_2['window_days'] = window_days
@@ -554,15 +686,21 @@ def calc_rolling_qr_window(dau_decorated_df, window_days = 28, use_segment = Fal
 
     
 
-def calc_user_daily_usage(dau_decorated_df, last_date, window_days, breakouts):
+def calc_user_daily_usage(dau_decorated_df, last_date, window_days, breakouts, use_segment):
     window_start_date = last_date - timedelta(days = window_days-1)
     dau_dec = (dau_decorated_df
                .loc[(dau_decorated_df['activity_date'] >= window_start_date) & 
                     (dau_decorated_df['activity_date'] <= last_date)]
                .copy()
                )
+    
+    if use_segment:
+        groupby_cols = ['user_id', 'segment']
+    else:
+        groupby_cols = ['user_id']
+        
     dau_grouped_df = (dau_dec
-                      .groupby(['user_id'])['inc_amt']
+                      .groupby(groupby_cols)['inc_amt']
                       .agg(['count', 'sum'])
                       .reset_index()
                       .rename(columns = {'count' : 'active_days', 'sum': 'inc_amt' })
@@ -570,32 +708,56 @@ def calc_user_daily_usage(dau_decorated_df, last_date, window_days, breakouts):
     for b in breakouts:
         dau_grouped_df['%sd+ users' % b] = (dau_grouped_df['active_days'] >= b)
         
-    return dau_grouped_df
+    dau_grouped_df_sorted = dau_grouped_df.sort_values('inc_amt', ascending = False)  
+    if use_segment:
+        dau_grouped_df_sorted = dau_grouped_df_sorted.groupby('segment')
+    ############# THIS NEEDS WORK TO HANDLE CUMSUM WITH SEGMENTATION GROUPBY
+
+#    total_active_days = dau_grouped_df_sorted.active_days.sum()
+    total_inc_amt = dau_grouped_df_sorted.inc_amt.sum()
+    
+    dau_grouped_df_sorted['cum_inc_amt'] = dau_grouped_df_sorted.inc_amt.cumsum()
+    dau_grouped_df_sorted['cum_inc_amt_pct_of_total'] = dau_grouped_df_sorted['cum_inc_amt'] / total_inc_amt
+    
+    revenue_80pct_user_count = len(dau_grouped_df_sorted[dau_grouped_df_sorted.cum_inc_amt_pct_of_total <= .80])
+    total_user_count = len(dau_grouped_df_sorted)
+    
+    revenue_80pct_ratio = revenue_80pct_user_count / total_user_count
+    dau_grouped_df_sorted['revenue_80pct_ratio'] = revenue_80pct_ratio
+    
+    return dau_grouped_df_sorted
         
 
 
 
-def calc_dau_xau_ratio_for_window(dau_decorated_df, last_date, window_days, breakouts):
-    dau_grouped = calc_user_daily_usage(dau_decorated_df, last_date, window_days, breakouts)
+def calc_dau_xau_ratio_for_window(dau_decorated_df, last_date, window_days, breakouts, use_segment):
+    dau_grouped = calc_user_daily_usage(dau_decorated_df, last_date, window_days, breakouts, use_segment)
     
     dau_agg = pd.DataFrame()
-    dau_agg['active_days'] = pd.Series(dau_grouped.active_days.sum())
-    dau_agg['1d+ users'] = dau_grouped.user_id.nunique()
+    
+    if use_segment:
+        grouped_df = dau_grouped.groupby('segment')
+    else:
+        grouped_df = dau_grouped
+
+    dau_agg['active_days'] = pd.Series(grouped_df.active_days.sum())
+    dau_agg['1d+ users'] = grouped_df.user_id.nunique()
     dau_agg['dau_window_ratio'] = (dau_agg['active_days'] / window_days) / dau_agg['1d+ users']
     dau_agg['window_frequency'] = dau_agg['dau_window_ratio'] * window_days
     for b in breakouts:
         col_name = '%sd+ users' % b
         dau_agg[col_name] = dau_grouped[col_name].sum()
-        ratio_col_name = '%sd+ users per xau' % b
+        ratio_col_name = '%sd+ users / total %sd users' % (b, window_days)
         dau_agg[ratio_col_name] = dau_agg[col_name] / dau_agg['1d+ users']
     dau_agg['window_end_dt'] = last_date
-        
+    dau_agg = dau_agg.reset_index()
+    
     return dau_agg
 
 
 
 
-def create_dau_window_df(dau_decorated_df, window_days = 28, breakouts = [2, 4]):
+def create_dau_window_df(dau_decorated_df, window_days = 28, breakouts = [2, 4], use_segment = False):
     start_dt = min(dau_decorated_df['activity_date']) + timedelta(days = window_days)
     end_dt = max(dau_decorated_df['activity_date'])
     date_range = pd.date_range(start = start_dt, end = end_dt, freq = 'D')
@@ -607,7 +769,8 @@ def create_dau_window_df(dau_decorated_df, window_days = 28, breakouts = [2, 4])
         this_window = calc_dau_xau_ratio_for_window(dau_decorated_df, 
                                                     last_date = d2, 
                                                     window_days = window_days, 
-                                                    breakouts = breakouts)
+                                                    breakouts = breakouts,
+                                                    use_segment = use_segment)
         rolling_dau_xau_df = rolling_dau_xau_df.append(this_window)
         
     rolling_dau_xau_df['window_end_dt'] = pd.to_datetime(rolling_dau_xau_df['window_end_dt'])
